@@ -1,0 +1,8 @@
+[package]
+name = "spdm-platform"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+spdm-lib = { git = "https://github.com/9elements/spdm-lib.git", branch = "buildup" }
+embassy-sync.workspace = true

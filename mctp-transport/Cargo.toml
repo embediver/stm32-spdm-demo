@@ -1,0 +1,15 @@
+[package]
+name = "mctp-transport"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mctp-lib.workspace = true
+mctp.workspace = true
+embassy-stm32.workspace = true
+embassy-time.workspace = true
+embassy-sync.workspace = true
+embedded-hal-async.workspace = true
+defmt.workspace = true
+spdm-lib.workspace = true
+
