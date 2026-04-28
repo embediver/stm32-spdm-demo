@@ -1,5 +1,5 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "probe-rs run --chip STM32U5A5ZJTxQ"
+runner = "probe-rs run --chip STM32U5A5ZJTxQ --probe 0483:374e:002F001D3532510731333430"
 
 [build]
 target = "thumbv8m.main-none-eabihf"

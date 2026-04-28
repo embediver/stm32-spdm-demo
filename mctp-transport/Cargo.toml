@@ -6,10 +6,14 @@ edition = "2024"
 [dependencies]
 mctp-lib.workspace = true
 mctp.workspace = true
-embassy-stm32.workspace = true
+embassy-stm32 = { version = "0.6.0", features = ["defmt", "time-driver-any", "memory-x"] }
 embassy-time.workspace = true
 embassy-sync.workspace = true
 embedded-hal-async.workspace = true
 defmt.workspace = true
 spdm-lib.workspace = true
+
+[features]
+u5a5 = ["embassy-stm32/stm32u5a5zj"]
+h753 = ["embassy-stm32/stm32h753zi"]
 
