@@ -1,14 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["mctp-transport",
-    "spdm-responder", "spdm-platform",
-]
+members = ["mctp-transport", "spdm-responder", "spdm-platform", "spdm-requester" ]
 
 [profile.release]
 debug = 2
 
 [workspace.dependencies]
-embassy-stm32 = { version = "0.6.0", features = ["defmt", "stm32u5a5zj", "time-driver-any", "memory-x"] }
 embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
 embassy-sync = { version = "0.8.0"}
 embedded-hal-async = "1.0.0"

@@ -12,7 +12,7 @@ use mctp::{Eid, Error, Result, Tag};
 use mctp_lib::{AppCookie, Router};
 use mctp_lib::{Sender, i2c::MctpI2cEncap};
 
-use defmt::{Debug2Format, error, info};
+use defmt::{Debug2Format, error, info, trace};
 use spdm_lib::platform::transport::{SpdmTransport, TransportError, TransportResult};
 
 const MTU: usize = 255;
@@ -41,15 +41,16 @@ impl Sender for I2cSender<'_> {
         );
 
         loop {
-            let mut pkt = [0; MTU - 8];
+            let mut pkt = [0; MTU];
 
             let r = fragmenter.fragment_vectored(payload, &mut pkt);
 
             match r {
                 mctp_lib::fragment::SendOutput::Packet(items) => {
                     info!("Sending {} bytes of data + heder + pec...", items.len());
-                    let mut out = [0; MTU];
+                    let mut out = [0; MTU + 8];
                     let pkt = encap.encode(self.remote_addr, items, &mut out, true)?;
+                    trace!("Packet: {:02x}", pkt);
                     self.i2c.lock(|i2c| {
                         let mut i2c = i2c.borrow_mut();
                         i2c.blocking_write(self.remote_addr, pkt).map_err(|e| {
@@ -138,6 +139,7 @@ impl<'r> SpdmTransport for Transport<'r> {
             // First check if a message was already received by the stack
             let mut done = false;
             if let Some(m) = r.recv(handle) {
+                trace!("Got SPDM response: {:02x}", m.payload);
                 rsp.reset();
                 rsp.put_data(m.payload.len())
                     .map_err(|_| TransportError::BufferTooSmall)?;
@@ -176,6 +178,7 @@ impl<'r> SpdmTransport for Transport<'r> {
             }
 
             if let Some(m) = r.recv(handle) {
+                trace!("Got SPDM response: {:02x}", m.payload);
                 rsp.reset();
                 rsp.put_data(m.payload.len())
                     .map_err(|_| TransportError::BufferTooSmall)?;
@@ -203,7 +206,13 @@ impl<'r> SpdmTransport for Transport<'r> {
             let mut done = false;
             if let Some(m) = r.recv(handle) {
                 self.req_handle = m.cookie();
-                self.req = Some((m.source, m.tag));
+                self.req = Some((m.source, Tag::Unowned(m.tag.tag())));
+                info!(
+                    "Received request ({}, {})",
+                    Debug2Format(&m.source),
+                    Debug2Format(&m.tag)
+                );
+                trace!("SPDM Payload: {:02x}", m.payload);
                 req.reset();
                 req.put_data(m.payload.len())
                     .map_err(|_| TransportError::BufferTooSmall)?;
@@ -242,7 +251,13 @@ impl<'r> SpdmTransport for Transport<'r> {
 
             if let Some(m) = r.recv(handle) {
                 self.req_handle = m.cookie();
-                self.req = Some((m.source, m.tag));
+                self.req = Some((m.source, Tag::Unowned(m.tag.tag())));
+                info!(
+                    "Received request ({}, {})",
+                    Debug2Format(&m.source),
+                    Debug2Format(&m.tag)
+                );
+                trace!("SPDM Payload: {:02x}", m.payload);
                 req.reset();
                 req.put_data(m.payload.len())
                     .map_err(|_| TransportError::BufferTooSmall)?;
@@ -267,6 +282,12 @@ impl<'r> SpdmTransport for Transport<'r> {
         let Some((eid, tag)) = self.req else {
             return Err(spdm_lib::platform::transport::TransportError::ResponseNotExpected);
         };
+        info!(
+            "Sending Response ({}, {})",
+            Debug2Format(&eid),
+            Debug2Format(&tag)
+        );
+        trace!("SPDM Payload: {:02x}", resp.message_data().unwrap());
         self.router.lock(|r| {
             let mut r = r.borrow_mut();
             r.send(

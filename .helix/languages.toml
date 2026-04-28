@@ -1,0 +1,22 @@
+[language-server.rust-analyzer.config]
+check.command = "clippy"
+check.allTargets = false
+cargo.features = []
+check.workspace = false
+
+# [language-server.gpt]
+# command = "helix-gpt"
+# args = [
+#   "--handler",
+#   "copilot",
+#   "--copilotApiKey",
+#   "ghu_CNVIgwUD2RB4t3frIJRXKVJpbE8gVy4FaX3h",
+#   ]
+
+# [[language]]
+# name = "rust"
+# language-servers = [
+#   "rust-analyzer",
+#   "gpt"
+# ]
+
