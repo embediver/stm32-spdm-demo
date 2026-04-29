@@ -19,6 +19,7 @@ use spdm_lib::commands::certificate::request::generate_get_certificate;
 use spdm_lib::commands::digests::request::generate_digest_request;
 use spdm_lib::commands::version::VersionReqPayload;
 use spdm_lib::commands::version::request::generate_get_version;
+use spdm_lib::protocol::signature::NONCE_LEN;
 use spdm_lib::{
     codec::MessageBuf,
     context::SpdmContext,
@@ -38,12 +39,14 @@ const REMOTE_I2C_ADDR: u8 = 0x2b;
 const OWN_EID: u8 = 11;
 const RESPONDER_EID: u8 = 10;
 
-bind_interrupts!(struct I2cIrqs {
+bind_interrupts!(struct Irqs {
     I2C2_ER => i2c::ErrorInterruptHandler<peripherals::I2C2>;
     I2C2_EV => i2c::EventInterruptHandler<peripherals::I2C2>;
     DMA1_STREAM0 => dma::InterruptHandler<peripherals::DMA1_CH0>;
     DMA1_STREAM1 => dma::InterruptHandler<peripherals::DMA1_CH1>;
+    HASH_RNG => embassy_stm32::rng::InterruptHandler<peripherals::RNG>;
 });
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
     let p = embassy_stm32::init(Default::default());
@@ -60,7 +63,7 @@ async fn main(spawner: Spawner) -> ! {
     i2c_conf.scl_pullup = true;
     i2c_conf.sda_pullup = true;
 
-    let i2c = i2c::I2c::new(i2c_p, scl, sda, tx_dma, rx_dma, I2cIrqs, i2c_conf);
+    let i2c = i2c::I2c::new(i2c_p, scl, sda, tx_dma, rx_dma, Irqs, i2c_conf);
 
     let i2c = i2c.into_slave_multimaster(i2c::SlaveAddrConfig::basic(OWN_I2C_ADDR));
     let i2c = ThreadModeMutex::new(RefCell::new(i2c));
@@ -94,7 +97,8 @@ async fn main(spawner: Spawner) -> ! {
     let mut spdm_hash = MockHash::default();
     let mut m1_hash = MockHash::default();
     let mut l1_hash = MockHash::default();
-    let mut mock_rng = MockRng;
+    let rng = embassy_stm32::rng::Rng::new(p.RNG, Irqs);
+    let mut mock_rng = MockRng::new(rng);
     let evidence = MockEvidence;
     let capabilities = create_spdm_caps();
     let mut peer_cert_store = DemoPeerCertStore::default();
@@ -215,6 +219,9 @@ async fn main(spawner: Spawner) -> ! {
             }
         }
         println!("  sucessfully retrieved peer cert chain");
+
+        let mut nonce = [0u8; NONCE_LEN];
+        ctx.get_random_bytes(&mut nonce).unwrap();
 
         embassy_time::Timer::after_millis(5000).await;
     }

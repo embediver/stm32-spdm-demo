@@ -5,4 +5,4 @@ runner = "probe-rs run --chip STM32H753ZITx --probe 0483:374e:001C00253234511133
 target = "thumbv7em-none-eabihf"
 
 [env]
-DEFMT_LOG = "trace"
+DEFMT_LOG = "info"

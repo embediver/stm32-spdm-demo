@@ -19,7 +19,7 @@ cortex-m-rt = "0.7.0"
 panic-probe = { version = "1", features = ["print-defmt"] }
 
 mctp-transport = { path = "../mctp-transport", features = ["h753"] }
-spdm-platform = {path = "../spdm-platform" }
+spdm-platform = {path = "../spdm-platform", features = ["h753"] }
 static_cell = "2.1.1"
 mctp-lib.workspace = true
 mctp.workspace = true
