@@ -31,11 +31,12 @@ const OWN_I2C_ADDR: u8 = 0x2b;
 const REMOTE_I2C_ADDR: u8 = 0x2a;
 const OWN_EID: u8 = 10;
 
-bind_interrupts!(struct I2cIrqs {
+bind_interrupts!(struct Irqs {
     I2C2_ER => i2c::ErrorInterruptHandler<peripherals::I2C2>;
     I2C2_EV => i2c::EventInterruptHandler<peripherals::I2C2>;
     GPDMA1_CHANNEL0 => dma::InterruptHandler<peripherals::GPDMA1_CH0>;
     GPDMA1_CHANNEL1 => dma::InterruptHandler<peripherals::GPDMA1_CH1>;
+    RNG => embassy_stm32::rng::InterruptHandler<peripherals::RNG>;
 });
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
@@ -51,7 +52,7 @@ async fn main(spawner: Spawner) -> ! {
     let mut i2c_conf = i2c::Config::default();
     i2c_conf.timeout = Duration::from_secs(600);
 
-    let i2c = i2c::I2c::new(i2c_p, scl, sda, tx_dma, rx_dma, I2cIrqs, i2c_conf);
+    let i2c = i2c::I2c::new(i2c_p, scl, sda, tx_dma, rx_dma, Irqs, i2c_conf);
 
     let i2c = i2c.into_slave_multimaster(i2c::SlaveAddrConfig::basic(OWN_I2C_ADDR));
     let i2c = ThreadModeMutex::new(RefCell::new(i2c));
@@ -85,7 +86,8 @@ async fn main(spawner: Spawner) -> ! {
     let mut spdm_hash = MockHash::default();
     let mut m1_hash = MockHash::default();
     let mut l1_hash = MockHash::default();
-    let mut mock_rng = MockRng;
+    let rng = embassy_stm32::rng::Rng::new(p.RNG, Irqs);
+    let mut mock_rng = MockRng::new(rng);
     let evidence = MockEvidence;
     let capabilities = create_spdm_caps();
 

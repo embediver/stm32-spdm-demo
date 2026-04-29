@@ -9,6 +9,7 @@
 //! Provides minimal implementations of SPDM platform traits without
 //! requiring hardware or IPC dependencies.
 
+use embassy_stm32::rng::{Instance, Rng};
 use heapless::Vec;
 use spdm_lib::cert_store::{CertStoreError, CertStoreResult, PeerCertStore, SpdmCertStore};
 use spdm_lib::commands::challenge::MeasurementSummaryHashType;
@@ -25,7 +26,7 @@ use spdm_lib::protocol::{
 };
 use zerocopy::FromBytes;
 
-use defmt::{error, warn};
+use defmt::error;
 
 /// Mock certificate store with fixed placeholder data
 pub struct MockCertStore;
@@ -146,16 +147,16 @@ impl SpdmCertStore for MockCertStore {
 
 /// Mock hash implementation
 pub struct MockHash {
-    buffer: [u8; 1024],
-    len: usize,
+    buffer: [u8; 96],
+    pos: usize,
     algo: Option<SpdmHashAlgoType>,
 }
 
 impl MockHash {
     pub fn new() -> Self {
         Self {
-            buffer: [0u8; 1024],
-            len: 0,
+            buffer: [0u8; 96],
+            pos: 0,
             algo: None,
         }
     }
@@ -169,18 +170,15 @@ impl Default for MockHash {
 
 impl SpdmHash for MockHash {
     fn init(&mut self, algo: SpdmHashAlgoType, _secret: Option<&[u8]>) -> SpdmHashResult<()> {
-        self.len = 0;
+        self.pos = 0;
         self.algo = Some(algo);
         Ok(())
     }
 
     fn update(&mut self, data: &[u8]) -> SpdmHashResult<()> {
-        if self.len + data.len() > self.buffer.len() {
-            warn!("Hasher buffer to small!");
-            return Err(SpdmHashError::BufferTooSmall);
+        for (pos, x) in data.iter().enumerate() {
+            self.buffer[pos % self.buffer.len()] = self.buffer[pos % self.buffer.len()] ^ x;
         }
-        self.buffer[self.len..self.len + data.len()].copy_from_slice(data);
-        self.len += data.len();
         Ok(())
     }
 
@@ -195,12 +193,7 @@ impl SpdmHash for MockHash {
             return Err(SpdmHashError::BufferTooSmall);
         }
 
-        // Simple mock hash: XOR all input bytes and repeat
-        let mut hash_byte = 0u8;
-        for i in 0..self.len {
-            hash_byte ^= self.buffer[i];
-        }
-        dest[..hash_size].fill(hash_byte);
+        dest[..hash_size].copy_from_slice(&self.buffer[..hash_size]);
 
         Ok(())
     }
@@ -212,7 +205,7 @@ impl SpdmHash for MockHash {
     }
 
     fn reset(&mut self) {
-        self.len = 0;
+        self.pos = 0;
         self.algo = None;
     }
 
@@ -222,34 +215,32 @@ impl SpdmHash for MockHash {
 }
 
 /// Mock RNG implementation
-pub struct MockRng;
+pub struct MockRng<T: Instance> {
+    rng: Rng<'static, T>,
+}
 
-impl MockRng {
-    pub fn new() -> Self {
-        Self
+impl<T: Instance> MockRng<T> {
+    pub fn new(rng: Rng<'static, T>) -> Self {
+        Self { rng }
     }
 }
 
-impl Default for MockRng {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl SpdmRng for MockRng {
+impl<T: Instance> SpdmRng for MockRng<T> {
     fn get_random_bytes(&mut self, buf: &mut [u8]) -> SpdmRngResult<()> {
         // Mock: fill with incrementing pattern
-        for (i, byte) in buf.iter_mut().enumerate() {
-            *byte = (i & 0xFF) as u8;
-        }
+        // for (i, byte) in buf.iter_mut().enumerate() {
+        //     *byte = (i & 0xFF) as u8;
+        // }
+        self.rng.fill_bytes(buf);
         Ok(())
     }
 
     fn generate_random_number(&mut self, random_number: &mut [u8]) -> SpdmRngResult<()> {
         // Mock: fill with incrementing pattern starting from 0x42
-        for (i, byte) in random_number.iter_mut().enumerate() {
-            *byte = ((i + 0x42) & 0xFF) as u8;
-        }
+        // for (i, byte) in random_number.iter_mut().enumerate() {
+        //     *byte = ((i + 0x42) & 0xFF) as u8;
+        // }
+        self.rng.fill_bytes(random_number);
         Ok(())
     }
 }
