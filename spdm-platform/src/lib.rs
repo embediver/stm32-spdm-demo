@@ -9,6 +9,10 @@
 //! Provides minimal implementations of SPDM platform traits without
 //! requiring hardware or IPC dependencies.
 
+mod cert_chain;
+
+use cert_chain::*;
+
 use embassy_stm32::rng::{Instance, Rng};
 use heapless::Vec;
 use spdm_lib::cert_store::{CertStoreError, CertStoreResult, PeerCertStore, SpdmCertStore};
@@ -43,8 +47,6 @@ impl Default for MockCertStore {
     }
 }
 
-const CERT_CHAIN_LEN: usize = 128;
-
 impl SpdmCertStore for MockCertStore {
     fn slot_count(&self) -> u8 {
         1
@@ -78,16 +80,26 @@ impl SpdmCertStore for MockCertStore {
             return Err(CertStoreError::UnsupportedHashAlgo);
         }
 
-        // Mock cert chain: bytes of 0xAA
-        const CERT_CHAIN: [u8; CERT_CHAIN_LEN] = [0xAA; CERT_CHAIN_LEN];
-
-        if offset >= CERT_CHAIN.len() {
+        let cert_chain_len = self.cert_chain_len(asym_algo, slot_id)?;
+        if offset >= cert_chain_len {
             return Err(CertStoreError::InvalidOffset);
         }
 
-        let remaining = CERT_CHAIN.len() - offset;
+        let remaining = cert_chain_len - offset;
         let to_copy = remaining.min(cert_portion.len());
-        cert_portion[..to_copy].copy_from_slice(&CERT_CHAIN[offset..offset + to_copy]);
+        let portion = &mut cert_portion[..to_copy];
+
+        // Create an iterator that yields the bytes we need
+        let cert_chain_iter = [CA_CERT, INTER_CERT, END_RESPONDER_CERT]
+            .iter()
+            .map(|e| e.iter())
+            .flatten()
+            .skip(offset)
+            .take(to_copy);
+
+        for (n, x) in cert_chain_iter.enumerate() {
+            portion[n] = *x;
+        }
 
         // Fill remaining with zeros if any
         if to_copy < cert_portion.len() {
