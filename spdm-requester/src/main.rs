@@ -19,7 +19,7 @@ use spdm_lib::commands::certificate::request::generate_get_certificate;
 use spdm_lib::commands::digests::request::generate_digest_request;
 use spdm_lib::commands::version::VersionReqPayload;
 use spdm_lib::commands::version::request::generate_get_version;
-use spdm_lib::protocol::signature::NONCE_LEN;
+// TODO use spdm_lib::protocol::signature::NONCE_LEN;
 use spdm_lib::{
     codec::MessageBuf,
     context::SpdmContext,
@@ -89,6 +89,7 @@ async fn main(spawner: Spawner) -> ! {
     > = StaticCell::new();
     let router = ROUTER.init(router);
     spawner.spawn(mctp_loop(router).unwrap());
+    embassy_time::Timer::after_millis(100).await;
 
     // Setup SPDM platform
     let mut transport = Transport::new(router, i2c_mutex, OWN_I2C_ADDR);
@@ -102,6 +103,8 @@ async fn main(spawner: Spawner) -> ! {
     let evidence = MockEvidence;
     let capabilities = create_spdm_caps();
     let mut peer_cert_store = DemoPeerCertStore::default();
+
+    info!("Setup complete, starting SPDM flow...");
 
     // Setup SPDM context
     let mut ctx = SpdmContext::new(
@@ -119,112 +122,104 @@ async fn main(spawner: Spawner) -> ! {
     )
     .unwrap();
 
-    info!("Setup complete, starting SPDM flow...");
-
     let mut response_buf = [0u8; 4096];
     let mut msg_buf = MessageBuf::new(&mut response_buf);
+    msg_buf.reset();
+    info!("Step 1: GET_VERSION");
+    {
+        generate_get_version(&mut ctx, &mut msg_buf, VersionReqPayload::new(0, 0))
+            .map_err(|_| "Failed to generate GET_VERSION request")
+            .unwrap();
+        ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
+            .map_err(|_| "Failed to send GET_VERSION request")
+            .unwrap();
+    }
+    {
+        msg_buf.reset();
+        ctx.requester_process_message(&mut msg_buf)
+            .map_err(|_| "Failed to process VERSION response")
+            .unwrap();
+    }
+    info!("  GET_VERSION completed successfully");
+
+    info!("Step 2: GET_CAPABILITIES");
+    {
+        msg_buf.reset();
+        generate_capabilities_request_local(&mut ctx, &mut msg_buf)
+            .map_err(|_| "Failed to generate GET_CAPABILITIES request")
+            .unwrap();
+        ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
+            .map_err(|_| "Failed to send GET_CAPABILITIES request")
+            .unwrap();
+    }
+    {
+        msg_buf.reset();
+        ctx.requester_process_message(&mut msg_buf)
+            .map_err(|_| "Failed to process CAPABILITIES response")
+            .unwrap();
+    }
+    info!("  GET_CAPABILITIES completed successfully");
+
+    info!("Step 3: NEGOTIATE_ALGORITHMS");
+    {
+        msg_buf.reset();
+        generate_negotiate_algorithms_request(&mut ctx, &mut msg_buf, None, None, None, None)
+            .map_err(|_| "Failed to generate NEGOTIATE_ALGORITHMS request")
+            .unwrap();
+        ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
+            .map_err(|_| "Failed to send NEGOTIATE_ALGORITHMS request")
+            .unwrap();
+    }
+    {
+        msg_buf.reset();
+        ctx.requester_process_message(&mut msg_buf)
+            .map_err(|_| "Failed to process ALGORITHMS response")
+            .unwrap();
+    }
+    info!("  NEGOTIATE_ALGORITHMS completed successfully");
+
+    println!("\n  VCA (Version, Capabilities, Algorithms) flow completed!\n");
+
+    info!("Step 4: GET_DIGESTS");
+    {
+        msg_buf.reset();
+        generate_digest_request(&mut ctx, &mut msg_buf)
+            .map_err(|_| "Failed to generate GET_DIGESTS request")
+            .unwrap();
+        ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
+            .map_err(|_| "Failed to send GET_DIGESTS request")
+            .unwrap();
+    }
+    {
+        msg_buf.reset();
+        ctx.requester_process_message(&mut msg_buf)
+            .map_err(|e| {
+                error!("{}", Debug2Format(&e));
+                "Failed to process DIGESTS response"
+            })
+            .unwrap();
+    }
+    info!("  GET_DIGESTS completed successfully");
+
+    info!("Step 5: GET_CERTIFICATE");
     loop {
         msg_buf.reset();
-        info!("Step 1: GET_VERSION");
-        {
-            generate_get_version(&mut ctx, &mut msg_buf, VersionReqPayload::new(0, 0))
-                .map_err(|_| "Failed to generate GET_VERSION request")
-                .unwrap();
-            ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
-                .map_err(|_| "Failed to send GET_VERSION request")
-                .unwrap();
-        }
-        {
-            msg_buf.reset();
-            ctx.requester_process_message(&mut msg_buf)
-                .map_err(|_| "Failed to process VERSION response")
-                .unwrap();
-        }
-        info!("  GET_VERSION completed successfully");
+        generate_get_certificate(&mut ctx, &mut msg_buf, 0, 0, 0x200, false).unwrap();
+        ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
+            .unwrap();
 
-        info!("Step 2: GET_CAPABILITIES");
-        {
-            msg_buf.reset();
-            generate_capabilities_request_local(&mut ctx, &mut msg_buf)
-                .map_err(|_| "Failed to generate GET_CAPABILITIES request")
-                .unwrap();
-            ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
-                .map_err(|_| "Failed to send GET_CAPABILITIES request")
-                .unwrap();
+        ctx.requester_process_message(&mut msg_buf).unwrap();
+        if !matches!(
+            ctx.connection_info().state(),
+            spdm_lib::state::ConnectionState::DuringCertificate(_)
+        ) {
+            break;
         }
-        {
-            msg_buf.reset();
-            ctx.requester_process_message(&mut msg_buf)
-                .map_err(|_| "Failed to process CAPABILITIES response")
-                .unwrap();
-        }
-        info!("  GET_CAPABILITIES completed successfully");
-
-        info!("Step 3: NEGOTIATE_ALGORITHMS");
-        {
-            msg_buf.reset();
-            generate_negotiate_algorithms_request(&mut ctx, &mut msg_buf, None, None, None, None)
-                .map_err(|_| "Failed to generate NEGOTIATE_ALGORITHMS request")
-                .unwrap();
-            ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
-                .map_err(|_| "Failed to send NEGOTIATE_ALGORITHMS request")
-                .unwrap();
-        }
-        {
-            msg_buf.reset();
-            ctx.requester_process_message(&mut msg_buf)
-                .map_err(|_| "Failed to process ALGORITHMS response")
-                .unwrap();
-        }
-        info!("  NEGOTIATE_ALGORITHMS completed successfully");
-
-        info!("========================================");
-        info!("VCA (Version, Capabilities, Algorithms) flow completed!");
-        info!("========================================");
-
-        info!("Step 4: GET_DIGESTS");
-        {
-            msg_buf.reset();
-            generate_digest_request(&mut ctx, &mut msg_buf)
-                .map_err(|_| "Failed to generate GET_DIGESTS request")
-                .unwrap();
-            ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
-                .map_err(|_| "Failed to send GET_DIGESTS request")
-                .unwrap();
-        }
-        {
-            msg_buf.reset();
-            ctx.requester_process_message(&mut msg_buf)
-                .map_err(|e| {
-                    error!("{}", Debug2Format(&e));
-                    "Failed to process DIGESTS response"
-                })
-                .unwrap();
-        }
-        info!("  GET_DIGESTS completed successfully");
-
-        info!("Step 5: GET_CERTIFICATE");
-        loop {
-            msg_buf.reset();
-            generate_get_certificate(&mut ctx, &mut msg_buf, 0, 0, 0x200, false).unwrap();
-            ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
-                .unwrap();
-
-            ctx.requester_process_message(&mut msg_buf).unwrap();
-            if !matches!(
-                ctx.connection_info().state(),
-                spdm_lib::state::ConnectionState::DuringCertificate(_)
-            ) {
-                break;
-            }
-        }
-        println!("  sucessfully retrieved peer cert chain");
-
-        let mut nonce = [0u8; NONCE_LEN];
-        ctx.get_random_bytes(&mut nonce).unwrap();
-
-        embassy_time::Timer::after_millis(5000).await;
     }
+    println!("\n  sucessfully retrieved peer cert chain\n");
+
+    embassy_time::Timer::after_millis(1200).await;
+    cortex_m::peripheral::SCB::sys_reset()
 }
 
 #[embassy_executor::task]

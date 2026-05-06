@@ -12,10 +12,10 @@ use mctp::{Eid, Error, Result, Tag};
 use mctp_lib::{AppCookie, Router};
 use mctp_lib::{Sender, i2c::MctpI2cEncap};
 
-use defmt::{Debug2Format, error, info, trace};
+use defmt::{Debug2Format, debug, error, info, trace};
 use spdm_lib::platform::transport::{SpdmTransport, TransportError, TransportResult};
 
-const MTU: usize = 255;
+const MTU: usize = 254;
 
 pub const LISTEN_HANDLES: usize = 8;
 pub const REQ_HANDLES: usize = 8;
@@ -41,14 +41,14 @@ impl Sender for I2cSender<'_> {
         );
 
         loop {
-            let mut pkt = [0; MTU];
+            let mut pkt = [0; MTU - 8];
 
             let r = fragmenter.fragment_vectored(payload, &mut pkt);
 
             match r {
                 mctp_lib::fragment::SendOutput::Packet(items) => {
-                    info!("Sending {} bytes of data + heder + pec...", items.len());
-                    let mut out = [0; MTU + 8];
+                    info!("Sending {} bytes of data + header + pec...", items.len());
+                    let mut out = [0; MTU];
                     let pkt = encap.encode(self.remote_addr, items, &mut out, true)?;
                     trace!("Packet: {:02x}", pkt);
                     self.i2c.lock(|i2c| {
@@ -75,7 +75,7 @@ impl Sender for I2cSender<'_> {
     }
 
     fn get_mtu(&self) -> usize {
-        MTU
+        MTU - 8
     }
 }
 
@@ -160,6 +160,8 @@ impl<'r> SpdmTransport for Transport<'r> {
                 let mut buf = [0; MTU];
                 let packet = self.i2c_receive(&mut buf)?;
                 let decoder = MctpI2cEncap::new(self.own_i2c_addr);
+                debug!("Decoding i2c packet...");
+                trace!("Packet ({} bytes): {:02x}", packet.len(), packet);
                 let (mctp_pkt, header) = decoder.decode(packet, true).map_err(|e| {
                     error!("Error decoding i2c packet: {}", Debug2Format(&e));
                     TransportError::ReceiveError

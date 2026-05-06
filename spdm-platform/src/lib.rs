@@ -92,8 +92,7 @@ impl SpdmCertStore for MockCertStore {
         // Create an iterator that yields the bytes we need
         let cert_chain_iter = [CA_CERT, INTER_CERT, END_RESPONDER_CERT]
             .iter()
-            .map(|e| e.iter())
-            .flatten()
+            .flat_map(|e| e.iter())
             .skip(offset)
             .take(to_copy);
 
@@ -314,7 +313,7 @@ impl SpdmEvidence for MockEvidence {
 #[derive(Debug, Default)]
 pub struct PeerSlot {
     /// CertChain[K], retrieved in `CERTIFICATE` response.
-    pub cert_chain: Vec<u8, 1024>,
+    pub cert_chain: Vec<u8, 4096>,
 
     /// Digest[K], retrieved in `DIGESTS` response.
     pub digest: Vec<u8, 48>,
