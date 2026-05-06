@@ -4,16 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-mctp-lib.workspace = true
-mctp.workspace = true
+mctp-lib = { git = "https://github.com/OpenPRoT/mctp-lib.git" }
+mctp = { git = "https://github.com/CodeConstruct/mctp-rs.git", rev = "9e52b626863b916d900ca1ddfdd9215baf0f80fc" , default-features = false }
 embassy-stm32 = { version = "0.6.0", features = ["defmt", "time-driver-any", "memory-x"] }
-embassy-time.workspace = true
-embassy-sync.workspace = true
-embedded-hal-async.workspace = true
-defmt.workspace = true
-spdm-lib.workspace = true
+embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-sync = "0.8.0"
+embedded-hal-async = "1.0.0"
+defmt = "1"
+spdm-lib = { git = "https://github.com/9elements/spdm-lib.git", branch = "buildup" }
 
 [features]
+default = ["h753"]
 u5a5 = ["embassy-stm32/stm32u5a5zj"]
 h753 = ["embassy-stm32/stm32h753zi"]
 
