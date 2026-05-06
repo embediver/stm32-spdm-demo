@@ -3,6 +3,8 @@ check.command = "clippy"
 check.allTargets = false
 cargo.features = []
 check.workspace = false
+# cargo.buildScripts.overrideCommand = "cargo check --quiet --message-format=json --all-targets --keep-going"
+# cargo.buildScripts.invocationStrategy = "once"
 
 # [language-server.gpt]
 # command = "helix-gpt"

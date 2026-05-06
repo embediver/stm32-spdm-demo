@@ -8,21 +8,21 @@ publish = false
 [dependencies]
 embassy-stm32 = { version = "0.6.0", features = ["defmt", "stm32u5a5zj", "time-driver-any", "memory-x"] }
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "defmt"] }
-embassy-time.workspace = true
-embassy-sync.workspace = true
+embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-sync = { version = "0.8.0"}
 
-defmt.workspace = true
+defmt = "1"
 defmt-rtt = "1"
 
 cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.0"
 panic-probe = { version = "1", features = ["print-defmt"] }
 
-mctp-transport = { path = "../mctp-transport", features = ["u5a5"] }
-spdm-platform = {path = "../spdm-platform", features = ["u5a5"] }
+mctp-transport = { path = "../mctp-transport", features = ["u5a5"], default-features = false }
+spdm-platform = {path = "../spdm-platform", features = ["u5a5"], default-features = false }
 static_cell = "2.1.1"
-mctp-lib.workspace = true
-mctp.workspace = true
-spdm-lib.workspace = true
+mctp-lib = { git = "https://github.com/OpenPRoT/mctp-lib.git" }
+mctp = { git = "https://github.com/CodeConstruct/mctp-rs.git", rev = "9e52b626863b916d900ca1ddfdd9215baf0f80fc" , default-features = false }
+spdm-lib = { git = "https://github.com/9elements/spdm-lib.git", branch = "buildup" }
 
 
