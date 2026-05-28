@@ -218,8 +218,10 @@ async fn main(spawner: Spawner) -> ! {
     }
     println!("\n  sucessfully retrieved peer cert chain\n");
 
-    embassy_time::Timer::after_millis(1200).await;
-    cortex_m::peripheral::SCB::sys_reset()
+    // cortex_m::peripheral::SCB::sys_reset()
+    loop {
+        embassy_time::Timer::after_millis(120000).await;
+    }
 }
 
 #[embassy_executor::task]

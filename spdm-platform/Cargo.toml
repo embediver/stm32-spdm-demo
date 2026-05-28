@@ -10,6 +10,8 @@ embassy-sync = "0.8.0"
 heapless = "0.9.2"
 zerocopy = "0.8.48"
 defmt = "1"
+p384 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8"] }
+pkcs8 = "0.10"
 
 [features]
 default = ["h753"]

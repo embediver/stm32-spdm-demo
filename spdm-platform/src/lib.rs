@@ -4,10 +4,7 @@
 
 #![no_std]
 
-//! Mock platform implementations for SPDM loopback testing
-//!
-//! Provides minimal implementations of SPDM platform traits without
-//! requiring hardware or IPC dependencies.
+//! Implementations of the platform abstractions needed for SPDM
 
 mod cert_chain;
 
@@ -15,6 +12,9 @@ use cert_chain::*;
 
 use embassy_stm32::rng::{Instance, Rng};
 use heapless::Vec;
+use p384::ecdsa::signature::SignerMut;
+use p384::ecdsa::{Signature, SigningKey};
+use pkcs8::PrivateKeyInfo;
 use spdm_lib::cert_store::{CertStoreError, CertStoreResult, PeerCertStore, SpdmCertStore};
 use spdm_lib::commands::challenge::MeasurementSummaryHashType;
 use spdm_lib::platform::evidence::{SpdmEvidence, SpdmEvidenceError, SpdmEvidenceResult};
@@ -121,25 +121,31 @@ impl SpdmCertStore for MockCertStore {
             return Err(CertStoreError::UnsupportedHashAlgo);
         }
 
-        // Mock root hash: 48 bytes of 0xBB (SHA-384)
-        const ROOT_HASH: [u8; SHA384_HASH_SIZE] = [0xBB; SHA384_HASH_SIZE];
-        cert_hash.copy_from_slice(&ROOT_HASH);
+        for i in 0..SHA384_HASH_SIZE {
+            cert_hash[i] = u8::from_str_radix(&HEX_CA_CERT_SHA384[i * 2..i * 2 + 2], 16).unwrap();
+        }
         Ok(())
     }
 
     fn sign_hash(
         &self,
         slot_id: u8,
-        _hash: &[u8; SHA384_HASH_SIZE],
+        hash: &[u8; SHA384_HASH_SIZE],
         signature: &mut [u8; ECC_P384_SIGNATURE_SIZE],
     ) -> CertStoreResult<()> {
         if slot_id != 0 {
             return Err(CertStoreError::InvalidSlotId(slot_id));
         }
 
-        // Mock signature: 96 bytes of 0xCC (ECDSA P-384)
-        const SIGNATURE: [u8; ECC_P384_SIGNATURE_SIZE] = [0xCC; ECC_P384_SIGNATURE_SIZE];
-        signature.copy_from_slice(&SIGNATURE);
+        let key_info = PrivateKeyInfo::try_from(END_RESPONDER_KEY).unwrap();
+        let mut key = SigningKey::try_from(key_info).unwrap();
+
+        let sig: Signature = key.sign(hash);
+        let sig_bytes = sig.to_bytes();
+        assert_eq!(sig_bytes.len(), ECC_P384_SIGNATURE_SIZE);
+
+        signature.copy_from_slice(&sig_bytes);
+
         Ok(())
     }
 
