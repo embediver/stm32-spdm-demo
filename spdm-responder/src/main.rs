@@ -98,13 +98,13 @@ async fn main(spawner: Spawner) -> ! {
 
     // Setup SPDM platform
     let mut transport = Transport::new(router, i2c_mutex, OWN_I2C_ADDR);
-    let mut cert_store = MockCertStore;
+    let mut cert_store = DemoCertStore;
     let local_algorithms = create_local_algorithms();
     let mut spdm_hash = MockHash::default();
     let mut m1_hash = MockHash::default();
     let mut l1_hash = MockHash::default();
     let rng = embassy_stm32::rng::Rng::new(p.RNG, Irqs);
-    let mut mock_rng = MockRng::new(rng);
+    let mut mock_rng = PlatformRng::new(rng);
     let evidence = MockEvidence;
     let capabilities = create_spdm_caps();
 

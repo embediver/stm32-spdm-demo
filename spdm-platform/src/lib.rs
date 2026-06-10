@@ -33,21 +33,21 @@ use zerocopy::FromBytes;
 use defmt::{debug, error};
 
 /// Mock certificate store with fixed placeholder data
-pub struct MockCertStore;
+pub struct DemoCertStore;
 
-impl MockCertStore {
+impl DemoCertStore {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for MockCertStore {
+impl Default for DemoCertStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SpdmCertStore for MockCertStore {
+impl SpdmCertStore for DemoCertStore {
     fn slot_count(&self) -> u8 {
         1
     }
@@ -237,17 +237,17 @@ impl SpdmHash for MockHash {
 }
 
 /// Mock RNG implementation
-pub struct MockRng<T: Instance> {
+pub struct PlatformRng<T: Instance> {
     rng: Rng<'static, T>,
 }
 
-impl<T: Instance> MockRng<T> {
+impl<T: Instance> PlatformRng<T> {
     pub fn new(rng: Rng<'static, T>) -> Self {
         Self { rng }
     }
 }
 
-impl<T: Instance> SpdmRng for MockRng<T> {
+impl<T: Instance> SpdmRng for PlatformRng<T> {
     fn get_random_bytes(&mut self, buf: &mut [u8]) -> SpdmRngResult<()> {
         self.rng.fill_bytes(buf);
         Ok(())

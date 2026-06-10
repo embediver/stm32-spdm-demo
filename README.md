@@ -17,6 +17,10 @@ Currently implemented is the following SPDM message flow:
 - Get certificates
 - Challenge - response
 
-The platform abstractions are in parts still only a mock an not fully featured.
 Signature and certificate chain verification on the requester is still missing.
+The platform abstractions are in parts still only a mock an not fully featured.
 
+Currently implemented:
+- Hardware backed CSRNG
+- Demo cert chain with Rust-Crypto signing support 
+- Hardware backed hashing coming soon (Currently XOR mock implementation)
