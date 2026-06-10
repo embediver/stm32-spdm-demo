@@ -13,17 +13,23 @@ use embassy_sync::blocking_mutex::ThreadModeMutex;
 use embassy_time::{Duration, Instant};
 use mctp::Eid;
 use mctp_lib::Router;
-use spdm_lib::commands::algorithms::request::generate_negotiate_algorithms_request;
-use spdm_lib::commands::capabilities::request::generate_capabilities_request_local;
 use spdm_lib::commands::certificate::request::generate_get_certificate;
 use spdm_lib::commands::digests::request::generate_digest_request;
 use spdm_lib::commands::version::VersionReqPayload;
 use spdm_lib::commands::version::request::generate_get_version;
+use spdm_lib::commands::{
+    algorithms::request::generate_negotiate_algorithms_request,
+    challenge::MeasurementSummaryHashType,
+};
+use spdm_lib::commands::{
+    capabilities::request::generate_capabilities_request_local,
+    challenge::request::generate_challenge_request,
+};
 // TODO use spdm_lib::protocol::signature::NONCE_LEN;
 use spdm_lib::{
     codec::MessageBuf,
     context::SpdmContext,
-    protocol::{CapabilityFlags, DeviceCapabilities, SpdmVersion},
+    protocol::{CapabilityFlags, DeviceCapabilities, SpdmVersion, signature::NONCE_LEN},
 };
 use {defmt_rtt as _, panic_probe as _};
 
@@ -200,6 +206,18 @@ async fn main(spawner: Spawner) -> ! {
             .unwrap();
     }
     info!("  GET_DIGESTS completed successfully");
+    let cert_store = ctx.peer_cert_store().unwrap();
+    let provisioned_slots = cert_store.get_provisioned_slots().unwrap();
+    info!("  Provisioned slots: {:08b}", provisioned_slots);
+    for slot in 0..8 {
+        if (provisioned_slots & 1 << slot) > 0 {
+            info!(
+                "  Slot {} digest: {:02x}",
+                slot,
+                cert_store.get_digest(slot).unwrap()
+            );
+        }
+    }
 
     info!("Step 5: GET_CERTIFICATE");
     loop {
@@ -217,6 +235,44 @@ async fn main(spawner: Spawner) -> ! {
         }
     }
     println!("\n  sucessfully retrieved peer cert chain\n");
+    let cert_store = ctx.peer_cert_store().unwrap();
+    let provisioned_slots = cert_store.get_provisioned_slots().unwrap();
+    let hash_algo = ctx.connection_info().peer_algorithms().base_hash_algo;
+    for slot in 0..8 {
+        if (provisioned_slots & 1 << slot) > 0 {
+            println!(
+                "  Slot {} root cert hash: {:02x}",
+                slot,
+                cert_store
+                    .get_root_hash(slot, hash_algo.try_into().unwrap())
+                    .unwrap()
+            );
+        }
+    }
+
+    info!("Step 6: CHALLENGE");
+    let mut nonce = [0u8; NONCE_LEN];
+    ctx.get_random_bytes(&mut nonce).unwrap();
+    trace!("  Nonce: {:02x}", nonce);
+
+    {
+        msg_buf.reset();
+        generate_challenge_request(
+            &mut ctx,
+            &mut msg_buf,
+            0,
+            MeasurementSummaryHashType::All,
+            nonce,
+            None,
+        )
+        .unwrap();
+
+        ctx.requester_send_request(&mut msg_buf, RESPONDER_EID)
+            .unwrap();
+        msg_buf.reset();
+        ctx.requester_process_message(&mut msg_buf).unwrap();
+    }
+    info!("  Got CHALLENGE_AUTH from responder");
 
     // cortex_m::peripheral::SCB::sys_reset()
     loop {

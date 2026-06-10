@@ -14,7 +14,7 @@ use embassy_stm32::rng::{Instance, Rng};
 use heapless::Vec;
 use p384::ecdsa::signature::SignerMut;
 use p384::ecdsa::{Signature, SigningKey};
-use pkcs8::PrivateKeyInfo;
+use sec1::EcPrivateKey;
 use spdm_lib::cert_store::{CertStoreError, CertStoreResult, PeerCertStore, SpdmCertStore};
 use spdm_lib::commands::challenge::MeasurementSummaryHashType;
 use spdm_lib::platform::evidence::{SpdmEvidence, SpdmEvidenceError, SpdmEvidenceResult};
@@ -30,7 +30,7 @@ use spdm_lib::protocol::{
 };
 use zerocopy::FromBytes;
 
-use defmt::error;
+use defmt::{debug, error};
 
 /// Mock certificate store with fixed placeholder data
 pub struct MockCertStore;
@@ -137,14 +137,19 @@ impl SpdmCertStore for MockCertStore {
             return Err(CertStoreError::InvalidSlotId(slot_id));
         }
 
-        let key_info = PrivateKeyInfo::try_from(END_RESPONDER_KEY).unwrap();
-        let mut key = SigningKey::try_from(key_info).unwrap();
+        debug!("Signing hash...");
+
+        let key_info = EcPrivateKey::try_from(END_RESPONDER_KEY).unwrap();
+        let mut key = SigningKey::from_slice(key_info.private_key).unwrap();
+
+        debug!("Private key loaded.");
 
         let sig: Signature = key.sign(hash);
         let sig_bytes = sig.to_bytes();
         assert_eq!(sig_bytes.len(), ECC_P384_SIGNATURE_SIZE);
 
         signature.copy_from_slice(&sig_bytes);
+        debug!("Successfully signed {} byte hash.", SHA384_HASH_SIZE);
 
         Ok(())
     }
@@ -244,19 +249,11 @@ impl<T: Instance> MockRng<T> {
 
 impl<T: Instance> SpdmRng for MockRng<T> {
     fn get_random_bytes(&mut self, buf: &mut [u8]) -> SpdmRngResult<()> {
-        // Mock: fill with incrementing pattern
-        // for (i, byte) in buf.iter_mut().enumerate() {
-        //     *byte = (i & 0xFF) as u8;
-        // }
         self.rng.fill_bytes(buf);
         Ok(())
     }
 
     fn generate_random_number(&mut self, random_number: &mut [u8]) -> SpdmRngResult<()> {
-        // Mock: fill with incrementing pattern starting from 0x42
-        // for (i, byte) in random_number.iter_mut().enumerate() {
-        //     *byte = ((i + 0x42) & 0xFF) as u8;
-        // }
         self.rng.fill_bytes(random_number);
         Ok(())
     }
@@ -281,7 +278,7 @@ impl SpdmEvidence for MockEvidence {
     fn pcr_quote_size(&self, _with_pqc_sig: bool) -> SpdmEvidenceResult<usize> {
         // Mock: 2 measurements
         // Format: count(1) + [index(1) + size(2) + data]*2
-        Ok(1 + (1 + 2 + 23) + (1 + 2 + 20))
+        Ok(1 + (1 + 2 + 15) + (1 + 2 + 20))
     }
 
     fn pcr_quote(&self, dest: &mut [u8], _with_pqc_sig: bool) -> SpdmEvidenceResult<usize> {
@@ -299,10 +296,10 @@ impl SpdmEvidence for MockEvidence {
         // Measurement 0
         dest[offset] = 0; // index
         offset += 1;
-        dest[offset..offset + 2].copy_from_slice(&23u16.to_le_bytes()); // size
+        dest[offset..offset + 2].copy_from_slice(&15u16.to_le_bytes()); // size
         offset += 2;
-        dest[offset..offset + 23].copy_from_slice(b"OpenPRoT SPDM Loopback");
-        offset += 23;
+        dest[offset..offset + 15].copy_from_slice(b"SPDM STM32 demo");
+        offset += 15;
 
         // Measurement 1
         dest[offset] = 1; // index

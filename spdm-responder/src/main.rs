@@ -4,10 +4,11 @@
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    bind_interrupts, dma,
+    Config, bind_interrupts, dma,
     i2c::{self, MultiMaster},
     mode::Async,
     peripherals,
+    rcc::Pll,
 };
 use embassy_sync::blocking_mutex::ThreadModeMutex;
 use embassy_time::{Duration, Instant};
@@ -40,7 +41,23 @@ bind_interrupts!(struct Irqs {
 });
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
-    let p = embassy_stm32::init(Default::default());
+    let mut config = Config::default();
+    let pll1 = Pll {
+        source: embassy_stm32::rcc::PllSource::MSIS,
+        prediv: embassy_stm32::rcc::PllPreDiv::DIV1, // 16 MHz / 1 = 16 MHz
+        mul: embassy_stm32::rcc::PllMul::MUL10,      // 16 MHz * 10 = 160 MHz
+        divp: None,
+        divq: None,
+        divr: Some(embassy_stm32::rcc::PllDiv::DIV1),
+    };
+    config.rcc = embassy_stm32::rcc::Config {
+        msis: Some(embassy_stm32::rcc::MSIRange::RANGE_16MHZ),
+        pll1: Some(pll1),
+        sys: embassy_stm32::rcc::Sysclk::PLL1_R,
+        voltage_range: embassy_stm32::rcc::VoltageScale::RANGE1,
+        ..Default::default()
+    };
+    let p = embassy_stm32::init(config);
     info!("SPDM Responder starting...");
 
     // Init I2C
@@ -117,8 +134,8 @@ async fn main(spawner: Spawner) -> ! {
             Ok(_) => {
                 info!("Processed SPDM request successfully");
             }
-            Err(_) => {
-                error!("Error processing SPDM request");
+            Err(e) => {
+                error!("Error processing SPDM request {:?}", Debug2Format(&e));
                 // Continue processing — don't exit on individual message errors
             }
         }
